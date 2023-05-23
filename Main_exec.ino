@@ -1,3 +1,4 @@
+#include "arduinoFFT.h"
 #include <WiFiManager.h>
 #include "RGBHelpers.h"
 #include "esp_wifi.h"
@@ -49,17 +50,25 @@ int BatteryLedPin2 = 13;
 
 WiFiManager wm;
 MPU6050 accelgyro;
+arduinoFFT FFT = arduinoFFT(); /* Create FFT object */
 
+const uint16_t samples = 128;
+const double samplingFrequency = 1300;
 bool blinkState = false;
 bool wm_nonblocking = false;
 float Vmin = 1.645 * 2;
 float Vmax = 2.083 * 2;
 int16_t ax, ay, az;
 int16_t gx, gy, gz;
-int axtab[128], ax1[128], ax2[128], ax2fft[128];
+double axtab[128], ax1[128], ax2[128], ax2fft[128], imag[128];
 int iteration = 0;
 
 byte leds = 1;
+
+#define SCL_INDEX 0x00
+#define SCL_TIME 0x01         //???
+#define SCL_FREQUENCY 0x02
+#define SCL_PLOT 0x03
 
 void setup() 
 { 
@@ -69,6 +78,7 @@ void setup()
     ax1[i] = 0;
     ax2[i] = 0;
     ax2fft[i] = 0;
+    imag[i] = 0;
   }
   // join I2C bus (I2Cdev library doesn't do this automatically)
     #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
@@ -175,7 +185,9 @@ void loop() //base delay 1000
 
   if (iteration == 128)
   {
-    //fft(ax2);
+    FFT.Windowing(ax2, samples, FFT_WIN_TYP_HAMMING, FFT_FORWARD);	/* Weigh data */
+    FFT.Compute(ax2, imag, samples, FFT_FORWARD); /* Compute FFT */
+    FFT.ComplexToMagnitude(ax2, imag, samples); /* Compute magnitudes */
     iteration = 0;
   }
 

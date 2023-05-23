@@ -6,11 +6,38 @@
 #include <stdio.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
-//max napiecie 2.083V
-//min napiecie 1.645V
+#include "I2Cdev.h"
+#include "MPU6050.h"
 
-float Vmin = 1.645 * 2;
-float Vmax = 2.083 * 2;
+// Arduino Wire library is required if I2Cdev I2CDEV_ARDUINO_WIRE implementation
+// is used in I2Cdev.h
+#if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
+    #include "Wire.h"
+#endif
+
+#define OUTPUT_READABLE_ACCELGYRO
+
+// class default I2C address is 0x68
+// specific I2C addresses may be passed as a parameter here
+// AD0 low = 0x68 (default for InvenSense evaluation board)
+// AD0 high = 0x69
+
+//MPU6050 accelgyro(0x69); // <-- use for AD0 high
+
+
+
+// uncomment "OUTPUT_READABLE_ACCELGYRO" if you want to see a tab-separated
+// list of the accel X/Y/Z and then gyro X/Y/Z values in decimal. Easy to read,
+// not so easy to parse, and slow(er) over UART.
+
+
+// uncomment "OUTPUT_BINARY_ACCELGYRO" to send all 6 axes of data as 16-bit
+// binary, one right after the other. This is very fast (as fast as possible
+// without compression or data loss), and easy to parse, but impossible to read
+// for a human.
+//#define OUTPUT_BINARY_ACCELGYRO
+
+
 int ButtonPin = 32;
 int latchPin = 27;      // Latch pin of 74HC595 is connected to Digital pin 5
 int clockPin = 25;      // Clock pin of 74HC595 is connected to Digital pin 6
@@ -18,16 +45,51 @@ int dataPin = 26;       // Data pin of 74HC595 is connected to Digital pin 4
 int BatteryPin = 34;
 int BatteryLedPin1 = 12;
 int BatteryLedPin2 = 13;
+#define LED_PIN 13
 
-
-bool wm_nonblocking = false;
 WiFiManager wm;
+MPU6050 accelgyro;
 
+bool blinkState = false;
+bool wm_nonblocking = false;
+float Vmin = 1.645 * 2;
+float Vmax = 2.083 * 2;
+int16_t ax, ay, az;
+int16_t gx, gy, gz;
+int axtab[128], ax1[128], ax2[128], ax2fft[128];
+int iteration = 0;
 
 byte leds = 1;
 
 void setup() 
 { 
+  for(int i = 0; i < 128; ++i)
+  {
+    axtab[i] = 0;
+    ax1[i] = 0;
+    ax2[i] = 0;
+    ax2fft[i] = 0;
+  }
+  // join I2C bus (I2Cdev library doesn't do this automatically)
+    #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
+        Wire.begin();
+    #elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
+        Fastwire::setup(400, true);
+    #endif
+
+  // initialize serial communication
+  // (38400 chosen because it works as well at 8MHz as it does at 16MHz, but
+  // it's really up to you depending on your project)
+  Serial.begin(115200);
+
+  // initialize device
+  Serial.println("Initializing I2C devices...");
+  accelgyro.initialize();
+
+  // verify connection
+  Serial.println("Testing device connections...");
+  Serial.println(accelgyro.testConnection() ? "MPU6050 connection successful" : "MPU6050 connection failed");
+  
   SetLedRGB(0, 0, 150);
   delay(1000);
 
@@ -40,10 +102,9 @@ void setup()
   pinMode(ButtonPin, INPUT);
 
   WiFi.mode(WIFI_STA);
-  Serial.begin(115200);
   Serial.setDebugOutput(true);  
   delay(3000);
-  Serial.println("\n Starting");
+  Serial.println("\n Wifi Starting");
 
   pinMode(ButtonPin, INPUT);
 
@@ -74,8 +135,52 @@ void setup()
 /*
  * loop() - this function runs over and over again
  */
-void loop() 
+void loop() //base delay 1000
 {
+  delay(1000);
+  // read raw accel/gyro measurements from device
+  accelgyro.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+
+  // these methods (and a few others) are also available
+  //accelgyro.getAcceleration(&ax, &ay, &az);
+  //accelgyro.getRotation(&gx, &gy, &gz);
+
+  #ifdef OUTPUT_READABLE_ACCELGYRO
+      // display tab-separated accel/gyro x/y/z values
+      Serial.print("a/g:\t");
+      Serial.print(ax); Serial.print("\t");
+      Serial.print(ay); Serial.print("\t");
+      Serial.print(az); Serial.print("\t");
+      Serial.print(gx); Serial.print("\t");
+      Serial.print(gy); Serial.print("\t");
+      Serial.println(gz);
+  #endif
+
+    #ifdef OUTPUT_BINARY_ACCELGYRO
+        Serial.write((uint8_t)(ax >> 8)); Serial.write((uint8_t)(ax & 0xFF));
+        Serial.write((uint8_t)(ay >> 8)); Serial.write((uint8_t)(ay & 0xFF));
+        Serial.write((uint8_t)(az >> 8)); Serial.write((uint8_t)(az & 0xFF));
+        Serial.write((uint8_t)(gx >> 8)); Serial.write((uint8_t)(gx & 0xFF));
+        Serial.write((uint8_t)(gy >> 8)); Serial.write((uint8_t)(gy & 0xFF));
+        Serial.write((uint8_t)(gz >> 8)); Serial.write((uint8_t)(gz & 0xFF));
+    #endif
+
+  axtab[iteration] = ax;
+  if (iteration > 0)
+  {
+    ax1[iteration] = ax1[iteration - 1] += axtab[iteration];
+    ax2[iteration] = ax2[iteration - 1] += ax1[iteration];
+  }
+  iteration += 1;
+
+  if (iteration == 128)
+  {
+    //fft(ax2);
+    iteration = 0;
+  }
+
+  flash(); //delay 300
+
   SetLedRGB(150, 0, 0);
 
   CheckButton();

@@ -157,13 +157,12 @@ void loop() //base delay 1000
 
   #ifdef OUTPUT_READABLE_ACCELGYRO
       // display tab-separated accel/gyro x/y/z values
-      Serial.print("a/g:\t");
-      Serial.print(ax); Serial.print("\t");
-      Serial.print(ay); Serial.print("\t");
-      Serial.print(az); Serial.print("\t");
-      Serial.print(gx); Serial.print("\t");
-      Serial.print(gy); Serial.print("\t");
-      Serial.println(gz);
+      Serial.print(ax); Serial.print(",");
+      Serial.print(ay); Serial.print(",");
+      Serial.print(az); Serial.print(",");
+      Serial.print(gx); Serial.print(",");
+      Serial.print(gy); Serial.print(",");
+      Serial.print(gz); Serial.print(",");
   #endif
 
     #ifdef OUTPUT_BINARY_ACCELGYRO
@@ -180,6 +179,10 @@ void loop() //base delay 1000
   {
     ax1[iteration] = ax1[iteration - 1] += axtab[iteration];
     ax2[iteration] = ax2[iteration - 1] += ax1[iteration];
+    Serial.print(ax1[iteration]); Serial.print(",");
+    Serial.print(ax2[iteration]); Serial.print(",");
+    Serial.print(axtab[iteration]);
+    Serial.println();
   }
   iteration += 1;
 
@@ -187,6 +190,7 @@ void loop() //base delay 1000
   {
     FFT.Windowing(ax2, samples, FFT_WIN_TYP_HAMMING, FFT_FORWARD);	/* Weigh data */
     FFT.Compute(ax2, imag, samples, FFT_FORWARD); /* Compute FFT */
+    PrintVector(ax2, samples, SCL_INDEX);
     FFT.ComplexToMagnitude(ax2, imag, samples); /* Compute magnitudes */
     iteration = 0;
   }
@@ -306,4 +310,31 @@ void CheckButton()
       
     }
   }
+}
+
+void PrintVector(double *vData, uint16_t bufferSize, uint8_t scaleType)
+{
+  for (uint16_t i = 0; i < bufferSize; i++)
+  {
+    double abscissa;
+    /* Print abscissa value */
+    switch (scaleType)
+    {
+      case SCL_INDEX:
+        abscissa = (i * 1.0);
+	break;
+      case SCL_TIME:
+        abscissa = ((i * 1.0) / samplingFrequency);
+	break;
+      case SCL_FREQUENCY:
+        abscissa = ((i * 1.0 * samplingFrequency) / samples);
+	break;
+    }
+    Serial.print(abscissa, 6);
+    if(scaleType==SCL_FREQUENCY)
+      Serial.print("Hz");
+    Serial.print(" ");
+    Serial.println(vData[i], 4);
+  }
+  Serial.println();
 }

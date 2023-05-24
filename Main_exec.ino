@@ -16,8 +16,8 @@
     #include "Wire.h"
 #endif
 
-#define OUTPUT_READABLE_ACCELGYRO
-#define OUTPUT_READABLE_YAWPITCHROLL
+//#define OUTPUT_READABLE_ACCELGYRO
+//#define OUTPUT_READABLE_YAWPITCHROLL
 #define OUTPUT_READABLE_WORLDACCEL
 
 // class default I2C address is 0x68
@@ -219,7 +219,7 @@ void loop() //base delay 1000
   // these methods (and a few others) are also available
   //accelgyro.getAcceleration(&ax, &ay, &az);
   //accelgyro.getRotation(&gx, &gy, &gz);
-  mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+  //mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
       // if programming failed, don't try to do anything
   #ifdef OUTPUT_READABLE_ACCELGYRO
       // display tab-separated accel/gyro x/y/z values

@@ -9,6 +9,7 @@
 #include <freertos/task.h>
 #include "I2Cdev.h"
 #include "MPU6050.h"
+#include "MPU6050_6Axis_MotionApps20.h"
 
 // Arduino Wire library is required if I2Cdev I2CDEV_ARDUINO_WIRE implementation
 // is used in I2Cdev.h
@@ -17,6 +18,8 @@
 #endif
 
 #define OUTPUT_READABLE_ACCELGYRO
+#define OUTPUT_READABLE_YAWPITCHROLL
+#define OUTPUT_READABLE_WORLDACCEL
 
 // class default I2C address is 0x68
 // specific I2C addresses may be passed as a parameter here
@@ -48,13 +51,31 @@ int BatteryLedPin1 = 12;
 int BatteryLedPin2 = 13;
 #define LED_PIN 13
 
+bool blinkState = false;
+
+// MPU control/status vars
+bool dmpReady = false;  // set true if DMP init was successful
+uint8_t mpuIntStatus;   // holds actual interrupt status byte from MPU
+uint8_t devStatus;      // return status after each device operation (0 = success, !0 = error)
+uint16_t packetSize;    // expected DMP packet size (default is 42 bytes)
+uint16_t fifoCount;     // count of all bytes currently in FIFO
+uint8_t fifoBuffer[64]; // FIFO storage buffer
+
+// orientation/motion vars
+Quaternion q;           // [w, x, y, z]         quaternion container
+VectorInt16 aa;         // [x, y, z]            accel sensor measurements
+VectorInt16 aaReal;     // [x, y, z]            gravity-free accel sensor measurements
+VectorInt16 aaWorld;    // [x, y, z]            world-frame accel sensor measurements
+VectorFloat gravity;    // [x, y, z]            gravity vector
+float euler[3];         // [psi, theta, phi]    Euler angle container
+float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
+
 WiFiManager wm;
-MPU6050 accelgyro;
+MPU6050 mpu;
 arduinoFFT FFT = arduinoFFT(); /* Create FFT object */
 
 const uint16_t samples = 128;
 const double samplingFrequency = 1300;
-bool blinkState = false;
 bool wm_nonblocking = false;
 float Vmin = 1.645 * 2;
 float Vmax = 2.083 * 2;
@@ -72,6 +93,33 @@ byte leds = 1;
 
 void setup() 
 { 
+  #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
+      Wire.begin();
+      Wire.setClock(400000); // 400kHz I2C clock. Comment this line if having compilation difficulties
+  #elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
+      Fastwire::setup(400, true);
+  #endif
+
+
+  // initialize serial communication
+  // (38400 chosen because it works as well at 8MHz as it does at 16MHz, but
+  // it's really up to you depending on your project)
+  Serial.begin(115200);
+  while (!Serial); // wait for Leonardo enumeration, others continue immediately
+
+  Serial.println(F("Initializing I2C devices..."));
+  mpu.initialize();
+
+  // verify connection
+  Serial.println(F("Testing device connections..."));
+  Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
+
+  // supply your own gyro offsets here, scaled for min sensitivity
+  mpu.setXGyroOffset(220);
+  mpu.setYGyroOffset(76);
+  mpu.setZGyroOffset(-85);
+  mpu.setZAccelOffset(1788); // 1688 factory default for my test chip
+
   for(int i = 0; i < 128; ++i)
   {
     axtab[i] = 0;
@@ -80,25 +128,6 @@ void setup()
     ax2fft[i] = 0;
     imag[i] = 0;
   }
-  // join I2C bus (I2Cdev library doesn't do this automatically)
-    #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
-        Wire.begin();
-    #elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
-        Fastwire::setup(400, true);
-    #endif
-
-  // initialize serial communication
-  // (38400 chosen because it works as well at 8MHz as it does at 16MHz, but
-  // it's really up to you depending on your project)
-  Serial.begin(115200);
-
-  // initialize device
-  Serial.println("Initializing I2C devices...");
-  accelgyro.initialize();
-
-  // verify connection
-  Serial.println("Testing device connections...");
-  Serial.println(accelgyro.testConnection() ? "MPU6050 connection successful" : "MPU6050 connection failed");
   
   SetLedRGB(0, 0, 150);
   delay(1000);
@@ -149,7 +178,7 @@ void loop() //base delay 1000
 {
   delay(1000);
   // read raw accel/gyro measurements from device
-  accelgyro.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+  mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
 
   // these methods (and a few others) are also available
   //accelgyro.getAcceleration(&ax, &ay, &az);
@@ -173,6 +202,24 @@ void loop() //base delay 1000
         Serial.write((uint8_t)(gy >> 8)); Serial.write((uint8_t)(gy & 0xFF));
         Serial.write((uint8_t)(gz >> 8)); Serial.write((uint8_t)(gz & 0xFF));
     #endif
+  if (mpu.dmpGetCurrentFIFOPacket(fifoBuffer))
+  {
+    #ifdef OUTPUT_READABLE_WORLDACCEL
+      // display initial world-frame acceleration, adjusted to remove gravity
+      // and rotated based on known orientation from quaternion
+      mpu.GetQuaternion(&q, fifoBuffer);
+      mpu.GetAccel(&aa, fifoBuffer);
+      mpu.GetGravity(&gravity, &q);
+      mpu.GetLinearAccel(&aaReal, &aa, &gravity);
+      mpu.GetLinearAccelInWorld(&aaWorld, &aaReal, &q);
+      //Serial.print("aworld\t");
+      //Serial.print(aaWorld.x);
+      //Serial.print("\t");
+      //Serial.print(aaWorld.y);
+      //Serial.print("\t");
+      //Serial.println(aaWorld.z);
+    #endif
+  }
 
   axtab[iteration] = ax;
   if (iteration > 0)

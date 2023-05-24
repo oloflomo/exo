@@ -261,11 +261,11 @@ void loop() //base delay 1000
       #endif
   }
 
-  axtab[iteration] = ax;
+  axtab[iteration] = aaReal.x;
   if (iteration > 0)
   {
-    ax1[iteration] = ax1[iteration - 1] += axtab[iteration];
-    ax2[iteration] = ax2[iteration - 1] += ax1[iteration];
+    ax1[iteration] = ax1[iteration - 1] + axtab[iteration];
+    ax2[iteration] = ax2[iteration - 1] + ax1[iteration];
     Serial.print(ax1[iteration]); Serial.print(",");
     Serial.print(ax2[iteration]); Serial.print(",");
     Serial.print(axtab[iteration]);

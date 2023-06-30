@@ -3,120 +3,142 @@
 #include "I2Cdev.h"
 //#include "arduinoFFT.h"
 #include <WiFiManager.h>
-#include "RGBHelpers.h"
 #include "esp_wifi.h"
 #include "esp_system.h"
-#include <driver/adc.h>
-#include <stdio.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
 //#include "MPU6050_6Axis_MotionApps20.h"
+//DS18b20
+#include <OneWire.h>
+#include <DallasTemperature.h>
+#include <RGBLed.h>
 
+#define LedRed 15   //RGB led pins
+#define LedGreen 2
+#define LedBlue 4
 
 ////////////PIN DEFINITION/////////////
 #define ButtonPin 35     // Button for baterry status or turning on wifi
-
-#define latchPin 27       // Latch pin of 74HC595 is connected to Digital pin 5
-#define clockPin 25       // Clock pin of 74HC595 is connected to Digital pin 6
-#define dataPin 26        // Data pin of 74HC595 is connected to Digital pin 4
-#define BatteryLedPin1 14 // Additional pin to show full led
-#define BatteryLedPin2 12 // Additional pin 2
-
-#define BatteryPin 34     // input pin for battry measurement
-
+#define ONE_WIRE_BUS 32   // dallas pin
 /////////////////GLOBAL VARIABLES////////////////
 bool blinkState = false;
 
 WiFiManager wm;
 
+OneWire oneWire(ONE_WIRE_BUS);      //inicjalizacja onewire
+DallasTemperature Dallas(&oneWire); //inicjalizacja dallasa
+
+RGBLed led(LedRed, LedGreen, LedBlue, RGBLed::COMMON_CATHODE);    //led setup
+
 unsigned long ButtonTime = 0; //time since button pressed down
 
 const uint16_t samples = 128;
 const double samplingFrequency = 1300;
-bool wm_nonblocking = false;
-float Vmin = 1.645 * 2;
-float Vmax = 2.083 * 2;
 
+float DALTemp = 0; //- temperatura ciała
 
 byte leds = 1;
 
-#define SCL_INDEX 0x00
-#define SCL_TIME 0x01         //???
-#define SCL_FREQUENCY 0x02
-#define SCL_PLOT 0x03
+hw_timer_t *SD_timer = NULL;    //timer A each 10s interrupt to save CSV data
+
+float CSVdata[] = {0, 0, 0, 0};  //main array that get saved on csv file
 
 
-byte fun[10] = {0,1,2,0,0,0,0,0,0,0};
+byte fun[10] = {0,1,0,0,4,0,6,0,8,0};
 ////////////////////SETUP//////////////////
 void setup() 
 { 
   Serial.begin(115200);
   Serial.print("initialized serial");
-  SetLedRGB(0, 0, 150);
+  led.setColor(RGBLed::WHITE);  //LED start of initialization
   delay(1000);
+  
+  //innit dallas
 
-  // Set all the pins of 74HC595 as OUTPUT
-  pinMode(latchPin, OUTPUT);
-  pinMode(dataPin, OUTPUT);  
-  pinMode(clockPin, OUTPUT);
-  pinMode(BatteryLedPin1, OUTPUT);
-  pinMode(BatteryLedPin2, OUTPUT);
+
+  led.setColor(RGBLed::YELLOW); //LED initialize sd card
+  SDSetup();
+  led.flash(RGBLed::BLUE,100);  //LED initialize wifimanager
+  WMSetup();
+  delay(1000);
+  led.setColor(RGBLed::MAGENTA);  //LED set up sensors
+
+  InnitBattery();
+  //innit dallas
+  Dallas.begin();
+  Dallas.setResolution(12);
+  Dallas.setWaitForConversion(false);
+  MAXsetup();
+
   pinMode(ButtonPin, INPUT_PULLUP);
   attachInterrupt(ButtonPin, ButtonInterrupt, CHANGE); //button interupt enable on change
-
-
-  //wifimanager
-  WiFi.mode(WIFI_STA);
-  Serial.setDebugOutput(true);  
-  delay(3000);
-  Serial.println("\n Wifi Starting");
-
-  if(wm_nonblocking) wm.setConfigPortalBlocking(false);
-
-  std::vector<const char *> menu = {"wifi","info","param","sep","restart","exit"};
-  wm.setMenu(menu);
-
-  wm.setClass("invert");
-
-  wm.setConfigPortalTimeout(120);
   
-  ShowBattery();
 
-  SetLedRGB(150, 0, 0);
+
+
+  led.setColor(RGBLed::RED);  //LED show battery status
+  ShowBattery();
+  
+
+   
+  SD_timer = timerBegin(0, 80, true);
+  timerAttachInterrupt(SD_timer, &SDTimerInter, true);
+  timerAlarmWrite(SD_timer, 10000000, true);
+  timerAlarmEnable(SD_timer);
 
   Serial.print("Setup finished");
+  led.setColor(RGBLed::GREEN);  //LED confirm correst setup
+  delay(1000);
 }
 
 void loop()
 { 
-  delay(1000);
   for(int i = 0; i < sizeof(fun)/sizeof(fun[0]) ; i++){
   Serial.print(fun[i]);
+  Serial.print(":");
   switch(fun[i]){
     case 1:       //set led color to normal
-      SetLedRGB(150, 0, 0);
+      //flashLED();
+      led.setColor(RGBLed::GREEN);
       break;
     case 2:       //wifi manager process
-      SetLedRGB(0, 150, 0);
-      if(wm_nonblocking) wm.process();
+      wm.process();
       break;
     case 3:       //indicate battery level
-      SetLedRGB(0, 0, 150);
+      led.setColor(RGBLed::RED);  //LED show battery status
       ShowBattery();
       fun[3] = 0;
       break;
     case 4:       //initialize wifi manager
-      SetLedRGB(150, 0, 150);
-      WMinit();
+      led.flash(RGBLed::BLUE,100);  //LED initialize wifimanager
+      WMStart();
       fun[4] = 0;
       break;
-
-    
+    case 5:       //read pulse sensor
+      MAXREAD();
+      break;
+    case 6:       //read temperature
+      Dallas.requestTemperatures();
+      DALTemp = Dallas.getTempCByIndex(0);
+      CSVdata[2] = DALTemp;
+      break;
+    case 7:       //save data to scv file
+      led.setColor(RGBLed::YELLOW);;  //LED saving data to CSV
+      delay(100);
+      CSVWrite(CSVdata, sizeof(CSVdata)/sizeof(float));
+      fun[7] = 0;
+      break;
+    case 8:       //chceck battery precentage and voltage
+      CheckBattery();
+      break;
     default:
       break;
   }
 }
 Serial.println();
+}
+
+
+void SDTimerInter(){    //interrupt 10s timer to run save on csv
+  fun[7] = 7;
 }
 
 void ButtonInterrupt(){
@@ -136,78 +158,4 @@ void ButtonInterrupt(){
       fun[4] = 4;
     } 
   }
-}
-
-void WMinit(){  //initialize wifi manager
-    wm.setConfigPortalTimeout(120);
-      if (!wm.startConfigPortal("Exo","1234567890"))
-      {
-        Serial.println("failed to connect or hit timeout");
-        delay(3000);
-        // ESP.restart();
-      } 
-      else
-      {
-        //if you get here you have connected to the WiFi
-        Serial.println("connected...yeey :)");
-        SetLedRGB(0, 150, 0);
-      }
-    fun[2] = 2; //run service
-}
-
-
-void ShowBattery()
-{
-  ByteToRegister(BatteryToByte());
-  digitalWrite(BatteryLedPin1, LOW);
-  digitalWrite(BatteryLedPin2, LOW);
-  float Voltage = CheckBattery() * 2;
-  float ref = Vmin + ((Vmax - Vmin) / float(10)) * float(8);
-  if(Voltage > ref)
-    digitalWrite(BatteryLedPin1, HIGH);
-  ref = Vmin + ((Vmax - Vmin) / float(10)) * float(9);
-  if(Voltage > ref)
-    digitalWrite(BatteryLedPin2, HIGH);
-  delay(3000);
-  digitalWrite(BatteryLedPin1, LOW);
-  digitalWrite(BatteryLedPin2, LOW);
-  ByteToRegister(0);
-}
-
-void ByteToRegister(byte SomeByte)
-{
-  digitalWrite(latchPin, LOW);
-  shiftOut(dataPin, clockPin, LSBFIRST, SomeByte);
-  digitalWrite(latchPin, HIGH);
-}
-
-byte BatteryToByte()
-{
-  byte BatteryByte;
-  float Voltage = CheckBattery() * 2;
-  BatteryByte = 0;
-  for (int i = 0; i < 8; ++i)
-  {
-    float ref = Vmin + ((Vmax - Vmin) / float(10)) * float(i);
-    if(Voltage > ref)
-      bitSet(BatteryByte, i);
-      
-      digitalWrite(latchPin, LOW);
-      shiftOut(dataPin, clockPin, LSBFIRST, BatteryByte);
-      digitalWrite(latchPin, HIGH);
-      delay(50);
-  }
-  return BatteryByte;
-  Serial.print(BatteryByte);
-}
-
-float CheckBattery()
-{
-  float ADC_VALUE = analogRead(BatteryPin);
-  float VoltageValue = (ADC_VALUE * 3.3 ) / (4095);
-
-  Serial.print("Voltage = ");
-  Serial.print(VoltageValue);
-  Serial.print("volts\n");
-  return VoltageValue;
 }

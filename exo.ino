@@ -11,6 +11,45 @@
 #include <DallasTemperature.h>
 #include <RGBLed.h>
 
+
+
+
+
+
+#include <WiFi.h>
+#include <WiFiClient.h> 
+#include <ESP32_FTPClient.h>
+
+#include "time.h"
+#include "sntp.h"
+
+#include "FS.h"
+#include "SD.h"
+#include "SPI.h"
+
+
+
+
+
+// time server
+const char* ntpServer1 = "pool.ntp.org";
+const char* ntpServer2 = "time.nist.gov";
+const long  gmtOffset_sec = 3600;       //UTC+1
+const int   daylightOffset_sec = 3600;  //with winter time change
+
+
+//ftp server settings
+char ftp_server[] = "156.67.99.8";
+char ftp_user[]   = "exo";
+char ftp_pass[]   = "jejutonajgorszawyspa!!!";
+
+String rootpath = "/";  //sd card root
+// you can pass a FTP timeout and debbug mode on the last 2 arguments 0-no debug 2-debug
+ESP32_FTPClient ftp (ftp_server,ftp_user,ftp_pass, 5000, 0);
+
+
+
+
 #define LedRed 15   //RGB led pins
 #define LedGreen 2
 #define LedBlue 4

@@ -19,7 +19,7 @@ void WMSetup(){
 void WMStart(){  //initialize wifi manager
     if(wm.autoConnect("AutoConnectAP")){
       Serial.println("connected...yeey :)");
-      led.setColor(RGBLed::CYAN); //LED connected to wifi
+      ConnectedWiFi();
     }
     else {
       Serial.println("Configportal running");
@@ -35,11 +35,23 @@ void WMStart(){  //initialize wifi manager
       {
         //if you get here you have connected to the WiFi
         Serial.println("connected...yeey :)");
-        getLocalTime(&timeinfo);              //synchronize time
-        led.setColor(RGBLed::CYAN); //LED connected to wifi
+        ConnectedWiFi();
       }
-
     }
     getLocalTime(&timeinfo);
     
+}
+
+
+void ConnectedWiFi(){
+        led.setColor(RGBLed::CYAN); //LED synchornizing time + Connected wifi
+        while(!getLocalTime(&timeinfo)){};              //synchronize time
+
+        led.setColor(RGBLed::BLUE); //LED Sending file to server and formating SD card
+
+        CSVupdateserver();
+        delay(1000);
+        File root = SD.open("/");
+        delay(2000);
+        rm(root, rootpath);
 }

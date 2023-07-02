@@ -79,6 +79,6 @@ float CheckBattery()
   Serial.print(VoltageValue);
   Serial.print("volts, ");
   Serial.print(BatteryPrecent);
-  Serial.print("% \n");
+  Serial.print("%");
   return VoltageValue;
 }

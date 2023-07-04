@@ -31,22 +31,22 @@ void SDSetup(){
     configTime(gmtOffset_sec, daylightOffset_sec, ntpServer1, ntpServer2);  //configure time and servers
 }
 
-void CSVWrite(float csvarray[], int csvarraylenght){
+void CSVWrite(float csvarray[], int csvarraylenght){  //save data to csv files
   getLocalTime(&timeinfo);
   char filename[40];
   char filedata[400];
-  sprintf(filename, "/%04d-%02d-%02d", timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday);
+  sprintf(filename, "/%04d-%02d-%02d", timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday); //name of file (based on time)
 
-  sprintf(filedata, "%d,%d,%d",timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+  sprintf(filedata, "%d,%d,%d",timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec); //first 3 collums in csv data 
   for(int i = 0; i < csvarraylenght; i++){
-      sprintf(filedata, "%s,%f", filedata, csvarray[i]);
+      sprintf(filedata, "%s,%f", filedata, csvarray[i]);  //every next collumn comes from csvarray
    }
   sprintf(filedata, "%s\n", filedata);
   Serial.print("File name:");
   Serial.println(filename);
   Serial.print("CSV data");
   Serial.println(filedata);
-  appendFile(SD, filename, filedata);
+  appendFile(SD, filename, filedata); //execute append
 }
 
 void appendFile(fs::FS &fs, const char * path, const char * message){
@@ -69,8 +69,8 @@ void appendFile(fs::FS &fs, const char * path, const char * message){
 }
 
 
-void CSVupdateserver() {
-  ftp.OpenConnection();  //start frp connection
+void CSVupdateserver() {    //send csv files to ftp server
+  ftp.OpenConnection();  //start ftp connection
   ftp.InitFile("Type A");
   ftp.ChangeWorkDir("/pliki");  //move from ftp root to pliki folder
 
@@ -128,7 +128,7 @@ void readAndSendBigBinFile(fs::FS &fs, const char *path, ESP32_FTPClient ftpClie
 }
 
 
-void rm(File dir, String tempPath) {
+void rm(File dir, String tempPath) {  //erase all data from sd card
   while (true) {
     File entry = dir.openNextFile();
     String localPath;

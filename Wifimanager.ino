@@ -43,15 +43,15 @@ void WMStart(){  //initialize wifi manager
 }
 
 
-void ConnectedWiFi(){
+void ConnectedWiFi(){     //functions called when wifi is connected
         led.setColor(RGBLed::CYAN); //LED synchornizing time + Connected wifi
         while(!getLocalTime(&timeinfo)){};              //synchronize time
 
         led.setColor(RGBLed::BLUE); //LED Sending file to server and formating SD card
 
-        CSVupdateserver();
+        CSVupdateserver();  //send csv data to server
         delay(1000);
         File root = SD.open("/");
-        delay(2000);
-        rm(root, rootpath);
+        delay(1000);
+        rm(root, rootpath); //delete all files from sd card
 }

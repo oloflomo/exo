@@ -106,7 +106,7 @@ void MAXREAD(){
               if(averager.count() > kSampleThreshold) {
                 Serial.print("Heart Rate (avg, bpm): ");
                 Serial.println(average_bpm);
-                CSVdata[3] = average_bpm;
+                CSVdata[3] = average_bpm;   //CSVdataset pulse
               }
             }
             else {

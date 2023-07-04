@@ -1,17 +1,10 @@
-#define latchPin 27       // Latch pin of 74HC595 is connected to Digital pin 5
-#define clockPin 25       // Clock pin of 74HC595 is connected to Digital pin 6
-#define dataPin 26        // Data pin of 74HC595 is connected to Digital pin 4
-#define BatteryLedPin1 14 // Additional pin to show full led
-#define BatteryLedPin2 12 // Additional pin 2
-
-const float Vmin = 1.000;
-const float Vmax = 3.000;
+const float Vmin = 1.000;   //minimum input battery voltage
+const float Vmax = 3.000;   //maximum input battery voltage
 
 float BatteryPrecent = 0;
 
-#define BatteryPin 34     // input pin for battry measurement
 
-void InnitBattery(){
+void InnitBattery(){  // 
   // Set all the pins of 74HC595 as OUTPUT
   pinMode(latchPin, OUTPUT);
   pinMode(dataPin, OUTPUT);  
@@ -20,8 +13,7 @@ void InnitBattery(){
   pinMode(BatteryLedPin2, OUTPUT);
 }
 
-
-void ShowBattery()
+void ShowBattery()  //diplay battery level on led indicator
 {
   ByteToRegister(BatteryToByte());
   digitalWrite(BatteryLedPin1, LOW);
@@ -66,7 +58,7 @@ byte BatteryToByte()
   Serial.print(BatteryByte);
 }
 
-float CheckBattery()
+float CheckBattery()  //get battery voltage and precentage
 {
   float ADC_VALUE = analogRead(BatteryPin);
   float VoltageValue = (ADC_VALUE * 3.3 ) / (4095);

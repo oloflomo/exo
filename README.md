@@ -1,6 +1,6 @@
 *exo.ino is main file
 
-##Arduino IDE setup
+## Arduino IDE setup
 add these lines to arduino->preferences->board manager:
 ```
 http://arduino.esp8266.com/stable/package_esp8266com_index.json
